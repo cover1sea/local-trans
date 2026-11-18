@@ -37,14 +37,14 @@ SW_SHOWNOACTIVATE = 4
 TOOLBAR_STYLE = """
 QToolBar { spacing: 4px; padding: 2px 4px; }
 QToolButton {
-    border: 1px solid rgba(128, 128, 128, 0.45);
+    border: 1px solid rgba(128, 128, 128, 0.16);
     border-radius: 5px;
     padding: 3px 10px;
-    background: rgba(128, 128, 128, 0.10);
+    background: rgba(128, 128, 128, 0.12);
 }
 QToolButton:hover {
-    background: rgba(128, 128, 128, 0.32);
-    border-color: palette(highlight);
+    background: rgba(128, 128, 128, 0.30);
+    border-color: rgba(128, 128, 128, 0.30);
 }
 QToolButton:pressed { background: rgba(128, 128, 128, 0.50); }
 QToolButton:checked {
@@ -52,7 +52,7 @@ QToolButton:checked {
     color: palette(highlighted-text);
     border-color: palette(highlight);
 }
-QToolButton:checked:hover { border-color: palette(highlighted-text); }
+QToolButton:checked:hover { border-color: palette(highlight); background: palette(highlight); }
 QToolButton:disabled { color: rgba(128, 128, 128, 0.7); }
 """
 
