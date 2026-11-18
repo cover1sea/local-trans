@@ -1,0 +1,34 @@
+[project]
+name = "local-trans"
+version = "0.1.0"
+description = "PLaMo 3 Translate 0.8B を使ったスクリーンショット英日翻訳アプリ"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.8",
+    "transformers>=4.57",
+    "accelerate",
+    "numba",
+    "PySide6>=6.8",
+    "dxcam",
+    "mss",
+    "numpy",
+    "pillow",
+    "winrt-runtime",
+    "winrt-Windows.Foundation",
+    "winrt-Windows.Foundation.Collections",
+    "winrt-Windows.Globalization",
+    "winrt-Windows.Graphics.Imaging",
+    "winrt-Windows.Media.Ocr",
+    "winrt-Windows.Storage.Streams",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
