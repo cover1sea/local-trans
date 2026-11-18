@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QComboBox, QInputDialog, QLabel, QMainWindow, QMessageBox,
-                               QPlainTextEdit, QSplitter, QStatusBar, QToolBar, QVBoxLayout,
+                               QPlainTextEdit, QSplitter, QStatusBar, QToolBar, QToolButton, QVBoxLayout,
                                QWidget)
 
 from .capture import ScreenCapturer
@@ -32,6 +32,29 @@ user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 HWND_TOPMOST, HWND_NOTOPMOST = wintypes.HWND(-1), wintypes.HWND(-2)
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x1, 0x2, 0x10, 0x40
 SW_SHOWNOACTIVATE = 4
+
+# ライト・ダーク両方で見えるよう、色は半透明の灰色と選択色 (palette(highlight)) で作る
+TOOLBAR_STYLE = """
+QToolBar { spacing: 4px; padding: 2px 4px; }
+QToolButton {
+    border: 1px solid rgba(128, 128, 128, 0.45);
+    border-radius: 5px;
+    padding: 3px 10px;
+    background: rgba(128, 128, 128, 0.10);
+}
+QToolButton:hover {
+    background: rgba(128, 128, 128, 0.32);
+    border-color: palette(highlight);
+}
+QToolButton:pressed { background: rgba(128, 128, 128, 0.50); }
+QToolButton:checked {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+    border-color: palette(highlight);
+}
+QToolButton:checked:hover { border-color: palette(highlighted-text); }
+QToolButton:disabled { color: rgba(128, 128, 128, 0.7); }
+"""
 
 
 class MainWindow(QMainWindow):
@@ -108,6 +131,11 @@ class MainWindow(QMainWindow):
         self.act_show_region.setToolTip("いまの範囲を画面上に枠で表示")
         for a in (self.act_repeat, self.act_show_region, self.act_save_preset, self.act_manage_presets):
             tb2.addAction(a)
+        # ツールバーのボタンは枠がなく、ホバーしても見た目が変わらないので、ボタンらしく見せる
+        for bar in (tb, tb2):
+            bar.setStyleSheet(TOOLBAR_STYLE)
+            for btn in bar.findChildren(QToolButton):
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.flash = RegionFlash()
 
         central = QWidget()
