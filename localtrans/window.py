@@ -7,11 +7,12 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QComboBox, QInputDialog, QLabel, QMainWindow, QMessageBox,
+from PySide6.QtWidgets import (QApplication, QComboBox, QInputDialog, QLabel, QMainWindow, QMessageBox,
                                QPlainTextEdit, QSplitter, QStatusBar, QToolBar, QVBoxLayout,
                                QWidget)
 
 from .capture import ScreenCapturer
+from .compact import CompactView
 from .config import APP_DIR, Config
 from .hotkeys import HotkeyManager
 from .presets import PresetDialog, RegionFlash, region_text
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
     hk_repeat = Signal()
     hk_auto = Signal()
     hk_preset = Signal(int)
+    hk_compact = Signal()
 
     def __init__(self, cfg: Config) -> None:
         super().__init__()
@@ -57,6 +59,8 @@ class MainWindow(QMainWindow):
         self.hotkeys = HotkeyManager()
         self._prev_foreground = 0
         self.model_ok = False
+        self.compact = CompactView()
+        self._compact_started = False
 
         self._build_ui()
         self._wire()
@@ -76,10 +80,12 @@ class MainWindow(QMainWindow):
         self.act_top = QAction("最前面", self, checkable=True)
         self.act_top.setChecked(self.cfg.always_on_top)
         self.act_settings = QAction("設定", self)
+        self.act_compact = QAction("最小表示", self)
         for a in (self.act_select, self.act_auto):
             tb.addAction(a)
         tb.addSeparator()
         tb.addAction(self.act_top)
+        tb.addAction(self.act_compact)
         tb.addAction(self.act_settings)
 
         # 2 段目: 範囲プリセット
@@ -145,6 +151,17 @@ class MainWindow(QMainWindow):
         self.hk_repeat.connect(self.repeat_capture)
         self.hk_auto.connect(lambda: self.act_auto.setChecked(not self.act_auto.isChecked()))
         self.hk_preset.connect(self.trigger_preset)
+        self.hk_compact.connect(self.toggle_compact)
+        self.act_compact.triggered.connect(lambda: self.set_compact(True))
+        c = self.compact
+        c.exit_requested.connect(lambda: self.set_compact(False))
+        c.select_requested.connect(self.start_select)
+        c.repeat_requested.connect(self.repeat_capture)
+        c.auto_toggled.connect(self.act_auto.setChecked)
+        c.settings_requested.connect(self.open_settings)
+        c.moved.connect(self._save_compact_geometry)
+        c.quit_requested.connect(self.close)
+        self.act_auto.toggled.connect(lambda on: setattr(c, "auto_on", on))
         self.preset_box.activated.connect(self.on_preset_chosen)
         self.act_save_preset.triggered.connect(self.save_preset)
         self.act_manage_presets.triggered.connect(self.manage_presets)
@@ -162,6 +179,7 @@ class MainWindow(QMainWindow):
         w.model_ready.connect(self.on_model_ready)
         w.source_ready.connect(self.on_source)
         w.translation_progress.connect(self.dst.setPlainText)
+        w.translation_progress.connect(self.compact.set_text)
         w.translation_done.connect(self.on_done)
 
         self.auto_timer = QTimer(self)
@@ -171,10 +189,15 @@ class MainWindow(QMainWindow):
         f = QFont("Yu Gothic UI", self.cfg.font_size)
         self.src.setFont(f)
         self.dst.setFont(f)
+        self.compact.set_style(self.cfg.compact_font_size, self.cfg.compact_opacity / 100)
 
     def showEvent(self, e):  # noqa: N802
         super().showEvent(e)
         QTimer.singleShot(0, lambda: self.set_on_top(self.act_top.isChecked()))
+        if not self._compact_started:
+            self._compact_started = True
+            if self.cfg.compact_mode:
+                QTimer.singleShot(0, lambda: self.set_compact(True))
 
     # ---------- 最前面 ----------
     def _hwnd(self) -> int:
@@ -187,6 +210,9 @@ class MainWindow(QMainWindow):
 
     def bring_up_quietly(self) -> None:
         """フォーカスを奪わずに表示する (ゲームの操作を邪魔しない)。"""
+        if self.cfg.compact_mode:
+            self._raise_compact()
+            return
         hwnd = self._hwnd()
         if self.isMinimized() or not self.isVisible():
             user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
@@ -194,13 +220,65 @@ class MainWindow(QMainWindow):
             user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
 
+    # ---------- 最小表示 ----------
+    def toggle_compact(self) -> None:
+        if self.cfg.compact_mode and self.compact.locked:
+            # クリック透過中は、まず透過を解除する (帯をマウスで操作できるようにする)
+            self.compact.set_locked(False)
+            self._raise_compact()
+            return
+        self.set_compact(not self.cfg.compact_mode)
+
+    def set_compact(self, on: bool) -> None:
+        self.cfg.compact_mode = on
+        self.cfg.save()
+        c = self.compact
+        if on:
+            if self.cfg.compact_geometry:
+                x, y, w = self.cfg.compact_geometry
+                c.resize(w, c.height())
+                c.move(x, y)
+            else:
+                g = self.screen().availableGeometry()
+                c.resize(min(640, g.width() - 48), c.height())
+                c.move(g.right() - c.width() - 24, g.top() + 24)
+            c.set_text(self.dst.toPlainText())
+            self.hide()
+            self._raise_compact()
+        else:
+            c.set_locked(False)
+            c.hide()
+            self.show()
+            self.bring_up_quietly()
+
+    def _raise_compact(self) -> None:
+        c = self.compact
+        if not c.isVisible():
+            c.show()
+        user32.SetWindowPos(int(c.winId()), HWND_TOPMOST, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+
+    def _save_compact_geometry(self) -> None:
+        c = self.compact
+        self.cfg.compact_geometry = [c.x(), c.y(), c.width()]
+        self.cfg.save()
+
+    def _notice(self, text: str) -> None:
+        """ステータスバーに出す。最小表示のときは帯の上の小さな表示にも出す。"""
+        self.status_lbl.setText(text)
+        if self.cfg.compact_mode:
+            self.compact.set_hint(text)
+            self._raise_compact()
+
     # ---------- ホットキー ----------
     def register_hotkeys(self) -> None:
         bindings = {
             self.cfg.hotkey_select: self.hk_select.emit,
             self.cfg.hotkey_repeat: self.hk_repeat.emit,
             self.cfg.hotkey_auto: self.hk_auto.emit,
+            self.cfg.hotkey_compact: self.hk_compact.emit,
         }
+        bindings.pop("", None)
         extra_errs = []
         for i, p in enumerate(self.cfg.presets):
             k = p.get("hotkey")
@@ -214,6 +292,7 @@ class MainWindow(QMainWindow):
         self.act_select.setToolTip(f"範囲を選んで翻訳 ({self.cfg.hotkey_select})")
         self.act_repeat.setToolTip(f"選んでいる範囲をキャプチャして翻訳 ({self.cfg.hotkey_repeat})")
         self.act_auto.setToolTip(f"前回の範囲を監視し、文字が変わったら自動で翻訳 ({self.cfg.hotkey_auto})")
+        self.act_compact.setToolTip(f"訳文だけを半透明の帯で表示 ({self.cfg.hotkey_compact})")
         if errs:
             QMessageBox.warning(self, "ショートカットキー", "\n".join(errs))
 
@@ -253,7 +332,7 @@ class MainWindow(QMainWindow):
 
     def repeat_capture(self) -> None:
         if not self.cfg.last_region:
-            self.status_lbl.setText(f"先に「範囲を選んで翻訳」({self.cfg.hotkey_select}) で範囲を選んでください")
+            self._notice(f"先に「範囲を選んで翻訳」({self.cfg.hotkey_select}) で範囲を選んでください")
             self.bring_up_quietly()
             return
         self.worker.capture_and_translate(self.cfg.last_region)
@@ -326,7 +405,8 @@ class MainWindow(QMainWindow):
         self.status_lbl.setText(f"範囲「{name}」を保存しました（「管理」でショートカットを割り当てられます）")
 
     def manage_presets(self) -> None:
-        reserved = [self.cfg.hotkey_select, self.cfg.hotkey_repeat, self.cfg.hotkey_auto]
+        reserved = [self.cfg.hotkey_select, self.cfg.hotkey_repeat, self.cfg.hotkey_auto,
+                    self.cfg.hotkey_compact]
         dlg = PresetDialog(self.cfg.presets, reserved, self)
         if dlg.exec():
             self.cfg.presets = dlg.result_presets()
@@ -337,15 +417,15 @@ class MainWindow(QMainWindow):
     def set_auto(self, on: bool) -> None:
         if on and not self.cfg.last_region:
             self.act_auto.setChecked(False)
-            self.status_lbl.setText("自動監視には、先に範囲を選んでください")
+            self._notice("自動監視には、先に範囲を選んでください")
             return
         if on:
             self.worker.reset_auto()
             self.auto_timer.start(self.cfg.auto_interval_ms)
-            self.status_lbl.setText("自動監視中: 範囲の文字が変わると翻訳します")
+            self._notice("自動監視中: 範囲の文字が変わると翻訳します")
         else:
             self.auto_timer.stop()
-            self.status_lbl.setText("自動監視を停止しました")
+            self._notice("自動監視を停止しました")
 
     def _auto_tick(self) -> None:
         if self.cfg.last_region and self.model_ok:
@@ -368,14 +448,17 @@ class MainWindow(QMainWindow):
     def on_source(self, text: str) -> None:
         self.src.setPlainText(text)
         self.dst.setPlainText("")
+        if self.cfg.compact_mode:
+            self.compact.set_hint("翻訳中…")
         self.bring_up_quietly()
 
     def on_done(self, _src: str, dst: str) -> None:
         self.dst.setPlainText(dst)
+        self.compact.set_text(dst)
         self.bring_up_quietly()
 
     def on_error(self, msg: str) -> None:
-        self.status_lbl.setText("エラー: " + msg)
+        self._notice("エラー: " + msg)
 
     # ---------- 設定 ----------
     def open_settings(self) -> None:
@@ -394,6 +477,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, e):  # noqa: N802
         self.cfg.window_geometry = bytes(self.saveGeometry().toBase64()).decode()
+        if self.compact.isVisible():
+            self._save_compact_geometry()
         self.cfg.save()
         self.hotkeys.stop()
+        self.compact.close()
+        QApplication.quit()
         super().closeEvent(e)

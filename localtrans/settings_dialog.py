@@ -20,7 +20,7 @@ class SettingsDialog(QDialog):
     def __init__(self, cfg: Config, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("設定")
-        self.resize(520, 560)
+        self.resize(520, 640)
         self.cfg = cfg
         lay = QVBoxLayout(self)
 
@@ -29,9 +29,11 @@ class SettingsDialog(QDialog):
         self.k_select = _key_edit(cfg.hotkey_select)
         self.k_repeat = _key_edit(cfg.hotkey_repeat)
         self.k_auto = _key_edit(cfg.hotkey_auto)
+        self.k_compact = _key_edit(cfg.hotkey_compact)
         f.addRow("範囲を選んで翻訳", self.k_select)
         f.addRow("選んでいる範囲で翻訳", self.k_repeat)
         f.addRow("選んでいる範囲を自動監視 ON/OFF", self.k_auto)
+        f.addRow("最小表示 ON/OFF", self.k_compact)
         lay.addWidget(hk)
 
         tr = QGroupBox("翻訳")
@@ -67,6 +69,16 @@ class SettingsDialog(QDialog):
         self.interval.setSuffix(" ms")
         self.interval.setValue(cfg.auto_interval_ms)
         f.addRow("自動監視の間隔", self.interval)
+        self.c_font = QSpinBox()
+        self.c_font.setRange(8, 48)
+        self.c_font.setValue(cfg.compact_font_size)
+        f.addRow("最小表示の文字サイズ", self.c_font)
+        self.c_opacity = QSpinBox()
+        self.c_opacity.setRange(0, 100)
+        self.c_opacity.setSingleStep(5)
+        self.c_opacity.setSuffix(" %")
+        self.c_opacity.setValue(cfg.compact_opacity)
+        f.addRow("最小表示の背景の濃さ", self.c_opacity)
         lay.addWidget(ui)
 
         gl = QGroupBox("用語集 (固有名詞などの訳し方を固定)")
@@ -108,7 +120,7 @@ class SettingsDialog(QDialog):
     def _accept(self) -> None:
         keys = {}
         for name, edit in (("hotkey_select", self.k_select), ("hotkey_repeat", self.k_repeat),
-                           ("hotkey_auto", self.k_auto)):
+                           ("hotkey_auto", self.k_auto), ("hotkey_compact", self.k_compact)):
             text = edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText)
             if text:
                 try:
@@ -128,6 +140,8 @@ class SettingsDialog(QDialog):
         self.cfg.device = self.device.currentText().strip() or "cuda:0"
         self.cfg.font_size = self.font_size.value()
         self.cfg.auto_interval_ms = self.interval.value()
+        self.cfg.compact_font_size = self.c_font.value()
+        self.cfg.compact_opacity = self.c_opacity.value()
         gl = []
         for r in range(self.table.rowCount()):
             s = (self.table.item(r, 0).text() if self.table.item(r, 0) else "").strip()

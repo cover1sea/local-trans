@@ -24,6 +24,8 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Local Trans")
+    # 最小表示では本体を隠すので、ダイアログを閉じただけで終了しないようにする
+    app.setQuitOnLastWindowClosed(False)
     win = MainWindow(Config.load())
     win.show()
     return app.exec()
