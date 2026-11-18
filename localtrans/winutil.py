@@ -174,3 +174,21 @@ def trim_working_set() -> tuple[int, int]:
     before = ws()
     k.K32EmptyWorkingSet(h)
     return before, ws()
+
+
+WDA_EXCLUDEFROMCAPTURE = 0x11
+
+
+def exclude_from_capture(hwnd: int) -> bool:
+    """ウィンドウを画面キャプチャに写らないようにする (Windows 10 2004 以降)。
+
+    自動監視の範囲に翻訳ウィンドウや最小表示の帯が重なると、OCR が訳文まで読んでしまい、
+    「訳文が変わる → 原文が変わったと判断 → また訳す」を繰り返すため。
+    """
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    u.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
+    u.SetWindowDisplayAffinity.restype = wintypes.BOOL
+    ok = bool(u.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE))
+    if not ok:
+        log.warning("キャプチャからの除外に失敗: hwnd=%s err=%s", hwnd, ctypes.get_last_error())
+    return ok

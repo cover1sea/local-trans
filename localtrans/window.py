@@ -221,6 +221,7 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, e):  # noqa: N802
         super().showEvent(e)
+        winutil.exclude_from_capture(self._hwnd())
         QTimer.singleShot(0, lambda: self.set_on_top(self.act_top.isChecked()))
         if not self._compact_started:
             self._compact_started = True

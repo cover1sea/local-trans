@@ -5,6 +5,8 @@ from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QTextOption
 from PySide6.QtWidgets import QMenu, QWidget
 
+from .winutil import exclude_from_capture
+
 PAD = 12
 EDGE = 8          # 右端のこの幅をドラッグすると横幅を変える
 MIN_W = 240
@@ -63,6 +65,11 @@ class CompactView(QWidget):
         if visible:
             self.show()
         self.update()
+
+    def showEvent(self, e):  # noqa: N802
+        super().showEvent(e)
+        # 自動監視の範囲に重なっても、帯の訳文を OCR が読まないようにする
+        exclude_from_capture(int(self.winId()))
 
     # ---------- 描画と大きさ ----------
     def _lines_rect(self, width: int) -> QRect:

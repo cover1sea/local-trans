@@ -127,18 +127,30 @@ class Worker(QObject):
             self.status.emit("英文が見つかりませんでした")
             self.translation_done.emit("", "")
             return
-        self._auto_last = self._auto_pending = text
+        self._auto_last = self._auto_pending = self._auto_key(text)
         self._translate(text, ocr_t)
+
+    @staticmethod
+    def _auto_key(text: str) -> str:
+        """自動監視で「文字が変わったか」を比べるための形。
+
+        背景が動くゲームでは、OCR が「7」のような英字の少ないゴミをときどき拾う。
+        英字が 3 文字未満の段落は比べるときに無視して、ゴミだけの変化では訳し直さない。
+        """
+        paras = [p.strip() for p in text.split("\n\n")]
+        return "\n\n".join(p for p in paras if sum(c.isalpha() for c in p) >= 3)
 
     def _auto(self, region: list[int]) -> None:
         text = self._read(self.capturer.grab_rect(*region))
-        if not text or text == self._auto_last:
-            self._auto_pending = text
+        key = self._auto_key(text)
+        if not key or key == self._auto_last:
+            self._auto_pending = key
             return
-        if text != self._auto_pending:  # 文字送り中かもしれないので、次の読み取りまで待つ
-            self._auto_pending = text
+        if key != self._auto_pending:  # 文字送り中かもしれないので、次の読み取りまで待つ
+            self._auto_pending = key
             return
-        self._auto_last = text
+        self._auto_last = key
+        log.info("自動監視: 文字が変わったので翻訳します (%d 文字)", len(text))
         self._set_busy(True)
         try:
             self.source_ready.emit(text)
