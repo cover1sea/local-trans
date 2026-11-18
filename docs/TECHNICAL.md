@@ -64,6 +64,13 @@ uv run python main.py
 - 「クリックを透過する」は `WindowTransparentForInput` で実装しています。Qt はウィンドウのフラグを変えるとウィンドウをいったん隠すので、変えたあとに表示し直しています。
 - 最小表示のあいだはメインウィンドウを隠すので、`setQuitOnLastWindowClosed(False)` にしています。アプリはメインウィンドウの `closeEvent` で終了します。
 
+## メモリの使い方
+
+- モデルを読み込んだ直後と最初の翻訳のあいだに、PyTorch と CUDA が RAM の約 1.5〜2GB のページに触れます。その多くは CUDA のカーネルの展開などで、二度と使いません。
+- そこで、読み込みのあとに短い文を 1 回訳してから `EmptyWorkingSet` で作業セットを手放します（`worker.py` の `_load`、`winutil.trim_working_set`）。手放したあとは、翻訳を続けても作業セットは 50MB 前後に収まります。
+- 手放したページは、ページファイルか元の DLL に戻るだけなので、コミットサイズ（タスクマネージャーの「コミット済み」）は約 5GB のまま変わりません。
+- VRAM はモデルの重み（bf16 で約 1.6GB）と CUDA の作業領域で、約 2GB を使います。
+
 ## タスクバーのアイコン
 
 - `main.py` で `SetCurrentProcessExplicitAppUserModelID("LocalTrans.App")` を呼び、タスクバーで Python とは別のアプリとして扱われるようにしています。

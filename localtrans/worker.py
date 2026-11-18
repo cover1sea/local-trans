@@ -14,6 +14,7 @@ from .capture import ScreenCapturer
 from .config import Config
 from .ocr import WindowsOcr
 from .translator import Translator
+from .winutil import trim_working_set
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +99,14 @@ class Worker(QObject):
         self.status.emit("翻訳モデルを読み込み中… (初回はダウンロードに数分かかります)")
         t0 = time.time()
         dev = self.translator.load()
+        # 1 回訳しておくと CUDA のカーネルが読み込まれ、最初の翻訳が速くなる。
+        # そのあと作業セットを手放すと、読み込みで触れただけのページ (約 1.5GB) が RAM から出ていく。
+        try:
+            self.translator.translate("Hello.", max_new_tokens=8)
+            before, after = trim_working_set()
+            log.info("作業セットを解放: %d MB → %d MB", before, after)
+        except Exception:  # noqa: BLE001
+            log.exception("準備の翻訳か作業セットの解放に失敗")
         self.model_ready.emit(f"{dev} ・ 読み込み {time.time() - t0:.1f} 秒")
 
     def _get_ocr(self) -> WindowsOcr:

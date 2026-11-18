@@ -145,3 +145,32 @@ def restore_foreground(hwnd: int) -> None:
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, SW_RESTORE)
     force_foreground(hwnd)
+
+
+def trim_working_set() -> tuple[int, int]:
+    """このプロセスの作業セット (物理メモリ上のページ) を手放す。戻り値は前後の作業セット (MB)。
+
+    PyTorch と CUDA は読み込み時に 1.5GB ほどのページに触れるが、その多くは二度と使わない。
+    手放したページは、必要になったときだけディスクから読み戻される。
+    """
+    class PMC(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("_pool", ctypes.c_size_t * 4), ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t)]
+
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.GetCurrentProcess.restype = wintypes.HANDLE
+    k.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+    k.K32EmptyWorkingSet.argtypes = [wintypes.HANDLE]
+    h = k.GetCurrentProcess()
+
+    def ws() -> int:
+        c = PMC()
+        c.cb = ctypes.sizeof(c)
+        k.K32GetProcessMemoryInfo(h, ctypes.byref(c), c.cb)
+        return c.WorkingSetSize // 2**20
+
+    before = ws()
+    k.K32EmptyWorkingSet(h)
+    return before, ws()
