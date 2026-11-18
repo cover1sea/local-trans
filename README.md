@@ -14,6 +14,14 @@ PLaMo 3 Translate 0.8B（PFN）を使って、画面の英文をその場で日�
 
 `LocalTrans.bat` をダブルクリックします。初回は依存パッケージのインストールとモデルのダウンロード（約 1.8GB）が入ります。
 
+デスクトップとスタートメニューにショートカットを作るときは、初回の起動が終わってから次のコマンドを実行します。ショートカットにはアプリのアイコンが付き、そこから起動したウィンドウはタスクバーにもこのアプリとしてピン留めできます。
+
+```bash
+uv run python tools/make_shortcuts.py
+```
+
+ショートカットを消すときは `--remove` を付けて実行します。
+
 開発中は次のコマンドで動かします。
 
 ```bash
@@ -85,6 +93,7 @@ uv run python main.py
 - `localtrans/compact.py`: 最小表示の帯
 - `localtrans/worker.py`: OCR と翻訳のバックグラウンド処理、自動監視
 - `localtrans/window.py`: メインウィンドウ
+- `tools/make_shortcuts.py`: デスクトップとスタートメニューのショートカットを作る
 - 設定は `config.json`、ログは `local-trans.log` に保存します。
 
 ## ライセンス
